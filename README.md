@@ -1,1 +1,1 @@
-# df-seeker
+# Duplicate files seeker
