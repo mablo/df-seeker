@@ -1,13 +1,14 @@
 package main
 
 import (
-	"crypto/sha256"
+	"crypto/sha1"
 	"encoding/hex"
 	"flag"
 	"fmt"
 	"io"
 	"io/ioutil"
 	"os"
+	"sync"
 )
 
 var Files = map[int64][]string {}
@@ -20,19 +21,37 @@ type Duplicate struct {
 
 var Duplicates []Duplicate
 
-func main()  {
+func main() {
 	wordPtr := flag.String("path", ".", "Directory path.")
-
 	flag.Parse()
 
 	buildFilesMap(*wordPtr)
+
+	var wg sync.WaitGroup
+	hashesChannel := make(chan map[string]string)
+
+	for _, list := range Files {
+		if len(list) > 1 {
+			for _, file := range list {
+				wg.Add(1)
+				go calculateHash(file, &wg, hashesChannel)
+			}
+		}
+	}
+
+	go func(messages chan map[string]string) {
+		wg.Wait()
+		close(messages)
+	}(hashesChannel)
+
+	a := getValues(hashesChannel)
 
 	for size, list := range Files {
 		if len(list) > 1 {
 			hashes := map[string][]string {}
 
 			for _, file := range list {
-				hash := calculateHash(file)
+				hash := a[file]
 				hashes[hash] = append(hashes[hash], file)
 			}
 
@@ -46,6 +65,14 @@ func main()  {
 				}
 			}
 		}
+	}
+
+	for _, dup := range Duplicates {
+		fmt.Printf("size: %s, hash: %s\n", humanSize(dup.Size), dup.Sum)
+		for _, file := range dup.Files {
+			fmt.Printf("- %s\n", file)
+		}
+		fmt.Print("\n")
 	}
 }
 
@@ -61,14 +88,19 @@ func buildFilesMap(path string) {
 	}
 }
 
-func calculateHash(file string) string {
+func calculateHash(file string, wg *sync.WaitGroup, channel chan map[string]string) {
+	defer wg.Done()
 	fh, _ := os.Open(file)
 
-	h := sha256.New()
+	h := sha1.New()
 	io.Copy(h, fh)
 	fh.Close()
 
-	return hex.EncodeToString(h.Sum(nil))
+	hash := make(map[string]string)
+
+	hash[file] = hex.EncodeToString(h.Sum(nil))
+
+	channel <- hash
 }
 
 func humanSize(b int64) string {
@@ -82,4 +114,15 @@ func humanSize(b int64) string {
 		exp++
 	}
 	return fmt.Sprintf("%.1f %ciB", float64(b)/float64(div), "KMGTPE"[exp])
+}
+
+func getValues(channel chan map[string]string) map[string]string {
+	a := map[string]string {}
+	for ret := range channel {
+		for x, y := range ret {
+			a[x] = y
+		}
+	}
+
+	return a
 }
