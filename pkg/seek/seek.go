@@ -17,9 +17,7 @@ type Options struct {
 }
 
 func Execute(options Options) []duplicate.Duplicate {
-	var filesList = map[int64][]string {}
-
-	filesList = fs.FetchFiles(*options.Path, *options.Recursive)
+	filesList := fs.FetchFiles(*options.Path, *options.Recursive)
 
 	var wg sync.WaitGroup
 	hashesChannel := make(chan map[string]string)
@@ -75,12 +73,14 @@ func calculateHash(file string, wg *sync.WaitGroup, channel chan map[string]stri
 	fh, _ := os.Open(file)
 
 	h := sha1.New()
-	io.Copy(h, fh)
+	_, err := io.Copy(h, fh)
 	fh.Close()
 
 	hash := make(map[string]string)
 
-	hash[file] = hex.EncodeToString(h.Sum(nil))
+	if err == nil {
+		hash[file] = hex.EncodeToString(h.Sum(nil))
+	}
 
 	channel <- hash
 }
