@@ -9,6 +9,7 @@ import (
 	"io"
 	"os"
 	"sync"
+	"time"
 )
 
 type Options struct {
@@ -18,6 +19,8 @@ type Options struct {
 
 func Execute(options Options) []duplicate.Duplicate {
 	filesList := fs.FetchFiles(*options.Path, *options.Recursive)
+
+	//flatFilesList := fs.FetchFilesFlat(*options.Path, *options.Recursive)
 
 	var wg sync.WaitGroup
 	hashesChannel := make(chan map[string]string)
@@ -69,21 +72,32 @@ func ExecuteAndDisplay(options Options) {
 }
 
 func calculateHash(file string, wg *sync.WaitGroup, channel chan map[string]string) {
-	defer wg.Done()
-	fh, _ := os.Open(file)
+	fh, err1 := os.Open(file)
+
+	if err1 != nil  {
+		print(file, " - czekam: ", "\n")
+		time.Sleep(1 * time.Second)
+		calculateHash(file, wg, channel, )
+		return
+	}
 
 	h := sha1.New()
 	_, err := io.Copy(h, fh)
 	fh.Close()
 
-	hash := make(map[string]string)
+	//print (" \t", file, "\t", err1 == nil, "\t", err == nil, "\n")
 
 	if err == nil {
+		hash := make(map[string]string)
 		hash[file] = hex.EncodeToString(h.Sum(nil))
+
+		//print(hash[file], "\t", file, "\n")
+
+		channel <- hash
 	}
 
-	channel <- hash
-}
+	wg.Done()
+ }
 
 
 func getValues(channel chan map[string]string) map[string]string {

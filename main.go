@@ -8,7 +8,7 @@ import (
 func main () {
 	options := seek.Options{
 		Path: flag.String(
-			"path",
+			"p",
 			".",
 			"Directory path."),
 		Recursive: flag.Bool(
