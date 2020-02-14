@@ -31,23 +31,24 @@ func fetchFlat(path string, recursive bool, files []File) []File {
 	return files
 }
 
-func FetchFiles(path string, recursive bool) map[int64][]string {
-	return fetch(strings.TrimRight(path, "/"), recursive, map[int64][]string {})
+func GroupBySize(files []File) map[int64][]File {
+	group := map[int64][]File{}
+
+	for _, file := range files {
+		group[file.Size] = append(group[file.Size], file)
+	}
+
+	return group
 }
 
-func fetch(path string, recursive bool, files map[int64][]string) map[int64][]string {
-	items, _ := ioutil.ReadDir(path)
+func FilterBySize(filesBySize map[int64][]File) []File {
+	var filtered []File
 
-	for _, item := range items {
-		switch mode := item.Mode(); {
-		case mode.IsDir():
-			if recursive {
-				files = fetch(path+"/"+item.Name(), true, files)
-			}
-		case mode.IsRegular():
-			files[item.Size()] = append(files[item.Size()], path + "/" + item.Name())
+	for _, files := range filesBySize {
+		if len(files) > 1 {
+			filtered = append(filtered, files...)
 		}
 	}
 
-	return files
+	return filtered
 }
