@@ -1,90 +1,29 @@
 package seek
 
 import (
-	"crypto/sha1"
-	"encoding/hex"
-	"github.com/mablo/df-seeker/pkg/display"
-	"github.com/mablo/df-seeker/pkg/duplicate"
 	"github.com/mablo/df-seeker/pkg/fs"
-	"io"
-	"os"
 	"sync"
 )
-
-type Options struct {
-	Path *string
-	Recursive *bool
-}
-
-func Execute(options Options) []duplicate.Duplicate {
-	filesList := fs.FetchFiles(*options.Path, *options.Recursive)
+func Execute(options Options) []Duplicate {
+	files := fs.FilterBySize(fs.GroupBySize(fs.FetchFilesFlat(*options.Path, *options.Recursive)))
 
 	var wg sync.WaitGroup
 	hashesChannel := make(chan map[string]string)
+	limit := make(chan struct{}, getRlimit(*options.OpenFilesLimitInPercent))
 
-	for _, list := range filesList {
-		if len(list) > 1 {
-			for _, file := range list {
-				wg.Add(1)
-				go calculateHash(file, &wg, hashesChannel)
-			}
-		}
+	for _, file := range files {
+		wg.Add(1)
+		go calculateHash(file, &wg, hashesChannel, limit)
 	}
 
 	go func(messages chan map[string]string) {
 		wg.Wait()
 		close(messages)
+		close(limit)
 	}(hashesChannel)
 
-	a := getValues(hashesChannel)
-
-	var duplicates []duplicate.Duplicate
-
-	for size, list := range filesList {
-		if len(list) > 1 {
-			hashes := map[string][]string {}
-
-			for _, file := range list {
-				hash := a[file]
-				hashes[hash] = append(hashes[hash], file)
-			}
-
-			for hash, files := range hashes {
-				if len(files) > 1 {
-					duplicates = append(duplicates, duplicate.Duplicate{
-						Size:  size,
-						Sum:   hash,
-						Files: files,
-					})
-				}
-			}
-		}
-	}
-
-	return duplicates
+	return sortByOptions(*options.SortParameter, *options.SortOrder, updateHashes(getValues(hashesChannel), files))
 }
-
-func ExecuteAndDisplay(options Options) {
-	display.Display(Execute(options))
-}
-
-func calculateHash(file string, wg *sync.WaitGroup, channel chan map[string]string) {
-	defer wg.Done()
-	fh, _ := os.Open(file)
-
-	h := sha1.New()
-	_, err := io.Copy(h, fh)
-	fh.Close()
-
-	hash := make(map[string]string)
-
-	if err == nil {
-		hash[file] = hex.EncodeToString(h.Sum(nil))
-	}
-
-	channel <- hash
-}
-
 
 func getValues(channel chan map[string]string) map[string]string {
 	a := map[string]string {}
@@ -95,4 +34,28 @@ func getValues(channel chan map[string]string) map[string]string {
 	}
 
 	return a
+}
+
+func updateHashes(hashes map[string]string, files []fs.File) []Duplicate {
+	tmpFiles := map[string][]fs.File{}
+	for _, file := range files {
+		file.Hash = hashes[file.Path]
+		tmpFiles[file.Hash] = append(tmpFiles[file.Hash], file)
+	}
+
+	var duplicates []Duplicate
+
+	for _, files := range tmpFiles {
+		if len(files) > 1 {
+			var s []fs.File = files[:1]
+
+			duplicates = append(duplicates, Duplicate{
+				Size:  s[0].Size,
+				Hash:  s[0].Hash,
+				Files: files,
+			})
+		}
+	}
+
+	return duplicates
 }
