@@ -1,4 +1,4 @@
-![Build status](https://github.com/mablo/df-seeker/workflows/build/badge.svg)
+![Build status](https://github.com/mablo/df-seeker/workflows/Build/badge.svg?branch=master)
 
 # Duplicate files seeker
 ## Usage
