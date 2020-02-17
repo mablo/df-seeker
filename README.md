@@ -1,3 +1,5 @@
+https://github.com/mablo/df-seeker/workflows/build/badge.svg
+
 # Duplicate files seeker
 ## Usage
 ```shell script
